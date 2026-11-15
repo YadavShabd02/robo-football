@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robo-Football · Adversarial Search Lab</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="logo">⚽</span><div><h1>ROBO-FOOTBALL</h1><small>6×5 adversarial search lab · Minimax · α-β · MCTS</small></div></div>
+  <nav id="tabs">
+    <button data-tab="play" class="active">🎮 Play</button>
+    <button data-tab="tree">🌳 Search Tree</button>
+    <button data-tab="trainer">✍️ α-β Trainer</button>
+    <button data-tab="lab">🧪 Experiments</button>
+    <button data-tab="tests">✅ Rule Checks</button>
+    <button data-tab="rules">📘 Rules & Design</button>
+  </nav>
+</header>
+
+<main>
+<!-- ================= PLAY ================= -->
+<section id="tab-play" class="tab active">
+  <div class="play-grid">
+    <aside class="panel" id="controls">
+      <h3>Opponent</h3>
+      <select id="preset" class="big">
+        <optgroup label="Play vs a bot (you are 🔵 A)">
+          <option value="hvEasy">🥉 Rookie · random</option>
+          <option value="hvMed" selected>🥈 Pro · greedy</option>
+          <option value="hvHard">🥇 Master · α-β depth 3</option>
+          <option value="hvLegend">🏆 Legend · α-β depth 4</option>
+          <option value="hvMcts">🎰 Gambler · MCTS</option>
+        </optgroup>
+        <optgroup label="Watch two bots">
+          <option value="greedyvab">👀 Greedy vs α-β</option>
+          <option value="aivai">👀 H3 vs H1 duel</option>
+          <option value="mctsvab">👀 MCTS vs α-β</option>
+        </optgroup>
+        <optgroup label="Two humans">
+          <option value="hvh">👥 Hot-seat</option>
+        </optgroup>
+        <option value="custom">⚙️ Custom</option>
+      </select>
+      <div id="presetDesc" class="mute" style="font-size:12px;margin-top:6px"></div>
+      <button class="primary wide" id="newMatch">🔄 New match</button>
+
+      <details id="customize">
+        <summary>⚙️ Customize agents & turn budget</summary>
+        <div class="agentcfg" id="cfgA"></div>
+        <div class="agentcfg" id="cfgB"></div>
+        <label>Turn budget (total turns) <input type="number" id="budget" value="80" min="10" max="200" step="2"></label>
+        <button class="wide" id="applyCustom">Start custom match</button>
+      </details>
+
+      <h3>Controls</h3>
+      <div class="row" id="aiControls">
+        <button id="playBtn" title="Space">▶ Play</button>
+        <button id="stepBtn" title="N">⏭ Step</button>
+      </div>
+      <div class="row">
+        <button id="undoBtn" title="U">↶ Undo</button>
+        <button id="hintBtn" title="H">💡 Hint</button>
+      </div>
+      <label id="speedWrap">Bot speed <span class="speedEnds"><small>slow</small><input type="range" id="speed" min="0" max="1500" value="950"><small>fast</small></span></label>
+
+      <details id="ovDetails">
+        <summary>👁️ Board overlays</summary>
+        <div class="toggles">
+          <label><input type="checkbox" id="ovThird" checked> Attacking thirds <small>(shooting zones)</small></label>
+          <label><input type="checkbox" id="ovKeeper" checked> Keeper coverage <small>(striped = saved)</small></label>
+          <label><input type="checkbox" id="ovLanes" checked> Passing lanes <small>(green open, red blocked)</small></label>
+          <label><input type="checkbox" id="ovDanger"> Tackle danger zone</label>
+          <label><input type="checkbox" id="ovCands" checked> AI candidate arrows</label>
+        </div>
+      </details>
+      <div class="row foot">
+        <label class="inline"><input type="checkbox" id="sound" checked> 🔊 Sound</label>
+        <button id="helpBtn">❓ How to play</button>
+      </div>
+      <p class="keys">Keys: <kbd>Space</kbd> play/pause · <kbd>N</kbd> step · <kbd>U</kbd> undo · <kbd>H</kbd> hint</p>
+    </aside>
+
+    <div class="center">
+      <div class="scoreboard">
+        <div class="team tA"><span id="nameA">Team A</span><small id="labelA"></small></div>
+        <div class="score"><span id="scoreA">0</span><span class="sep">:</span><span id="scoreB">0</span><div id="clock">80 turns left</div></div>
+        <div class="team tB"><span id="nameB">Team B</span><small id="labelB"></small></div>
+      </div>
+      <div class="turnbar" id="turnbar"></div>
+      <div class="pitch-row">
+        <div class="evalV" id="evalV" title="Who is better? H3 evaluation of the position. Bottom (cyan) = Team A, top (pink) = Team B.">
+          <div id="evalVFill"></div><span id="evalVNum">0</span>
+        </div>
+        <div class="pitch-wrap">
+          <div class="goal goalTop" id="goalTop"><span>B's goal · A scores here ▲</span></div>
+          <div class="board-frame">
+            <div class="axis rows" id="axisRows"></div>
+            <div id="board"></div>
+            <div class="axis cols" id="axisCols"></div>
+          </div>
+          <div class="goal goalBot" id="goalBot"><span>A's goal · B scores here ▼</span></div>
+          <div id="banner"></div>
+        </div>
+      </div>
+      <div class="actionbar">
+        <button id="shootBtn" class="shoot" disabled>🥅 SHOOT</button>
+        <button id="nullBtn" class="hidden">Pass turn (boxed in)</button>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div id="hintText"></div>
+      <div class="timeline">
+        <span>⏪ Replay</span>
+        <input type="range" id="scrub" min="0" max="0" value="0">
+        <span id="scrubLabel">ply 0</span>
+        <button id="liveBtn" class="hidden small">Back to live</button>
+      </div>
+    </div>
+
+    <aside class="panel" id="insight">
+      <div class="subtabs">
+        <button data-sub="comm" class="active">🎙️ Commentary</button>
+        <button data-sub="brain">🧠 AI brain<span class="pip hidden" id="brainPip"></span></button>
+        <button data-sub="stats">📊 Stats</button>
+      </div>
+      <div class="sub active" id="sub-comm"><div id="commentary"></div></div>
+      <div class="sub" id="sub-brain">
+        <div id="brainSummary" class="explain">The AI's reasoning for its last move appears here.</div>
+        <div id="thinkStats" class="stats"></div>
+        <div id="thinkTable"></div>
+      </div>
+      <div class="sub" id="sub-stats">
+        <h3>Evaluation over the match <small>(H3, + = Team A better)</small></h3>
+        <svg id="evalGraph" viewBox="0 0 300 90" preserveAspectRatio="none"></svg>
+        <h3>Match stats</h3>
+        <table id="matchStats" class="mini"></table>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= SEARCH TREE ================= -->
+<section id="tab-tree" class="tab">
+  <div class="intro"><b>What you learn here:</b> how minimax and α-β actually search a <i>real</i> robo-football position: α/β windows flowing down, values flowing up, and exactly where and why branches are cut. Hover any node to see its board.</div>
+  <div class="panel toolbar">
+    <label>Position <select id="treePos"></select></label>
+    <label>Algorithm <select id="treeAlgo"><option value="ab">Alpha-Beta</option><option value="mm">Minimax (no pruning)</option></select></label>
+    <label>Depth <select id="treeDepth"><option>1</option><option selected>2</option><option>3</option></select></label>
+    <label>Moves kept per node (k) <select id="treeK"><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+    <label>Heuristic <select id="treeH"><option>H1</option><option>H2</option><option selected>H3</option></select></label>
+    <label class="inline"><input type="checkbox" id="treeOrd" checked> Move ordering</label>
+    <button class="primary" id="treeBuild">Build tree</button>
+  </div>
+  <p class="hint">The real tree is huge (≈6–13 moves with the ball, ≈20–34 without), so only the first <b>k</b> moves per node are drawn (best-first if ordering is on). Leaves are scored by the heuristic from the root player's view; the summary on the right also reports the cost of searching the <b>full</b> tree.</p>
+  <div class="tree-layout">
+    <div>
+      <div class="stepper" id="treeStepper"></div>
+      <div class="treebox" id="treeSvgBox"></div>
+    </div>
+    <aside class="panel">
+      <h3>Step explanation</h3>
+      <div id="treeExplain" class="explain"></div>
+      <h3>Summary</h3>
+      <div id="treeSummary"></div>
+      <h3>Node board <small>(hover a node)</small></h3>
+      <div id="treeMini"></div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= TRAINER ================= -->
+<section id="tab-trainer" class="tab">
+  <div class="intro"><b>Exam practice:</b> the exam asks you to hand-trace α-β on a new tree. Pick an example or roll a random tree, trace it on paper, then step through to check. In <b>Quiz mode</b> the answer is hidden until you submit.</div>
+  <div class="panel toolbar">
+    <label class="grow">Tree (nested lists, leaves = numbers) <input id="trTree" value="((4,8),(2,7),(6,1))"></label>
+    <label>Root <select id="trRoot"><option value="max">MAX</option><option value="min">MIN</option></select></label>
+    <label>Examples <select id="trPreset">
+      <option value="">Choose…</option>
+      <option value="((4,8),(2,7),(6,1))">Example 1 (2 levels)</option>
+      <option value="(((3,5),(6,9)),((1,2),(8,4)))">Example 2 (3 levels)</option>
+      <option value="((3,12,8),(2,4,6),(14,5,2))">Textbook 3×3</option>
+      <option value="(((5,6),(7,4,5)),((3)),((6),(6,9)),((7),(5)))">Classic 4-branch</option>
+      <option value="((1,2),(3,4),(5,6))">Worst ordering (no pruning)</option>
+      <option value="((5,6),(3,4),(1,2))">Best ordering</option>
+    </select></label>
+    <button id="trRandom">🎲 Random tree</button>
+    <label class="inline"><input type="checkbox" id="trQuiz"> Quiz mode</label>
+    <button class="primary" id="trLoad">Load</button>
+  </div>
+  <div id="quizBar" class="panel hidden">
+    <b>Quiz:</b> click every leaf you think α-β <b>never evaluates</b>, type the root value, then check.
+    <input id="quizVal" type="number" placeholder="root value" style="width:110px">
+    <button class="primary" id="quizCheck">Check my answer</button>
+    <span id="quizResult"></span>
+  </div>
+  <div class="tree-layout">
+    <div>
+      <div class="stepper" id="trStepper"></div>
+      <div class="treebox" id="trSvgBox"></div>
+    </div>
+    <aside class="panel">
+      <h3>Step explanation</h3>
+      <div id="trExplain" class="explain"></div>
+      <h3>Trace log <small>(click a line to jump)</small></h3>
+      <ol id="trLog" class="log"></ol>
+      <h3>Summary</h3>
+      <div id="trSummary"></div>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= LAB ================= -->
+<section id="tab-lab" class="tab">
+  <div class="intro"><b>Part 3 experiments, run live:</b> every experiment uses seeded randomness, so results are reproducible. Tournaments swap sides every game and start with 2 random opening moves, so the deterministic bots don't replay the same match. Score % = (W + ½D) / N, shown ±95% confidence interval.
+    <div class="row" style="margin-top:8px"><button class="primary" id="runAll">▶ Run all experiments</button><button id="copyAll" disabled>📋 Copy all results (Markdown)</button><span id="runAllStatus" class="mute"></span></div>
+  </div>
+  <div id="labCards"></div>
+</section>
+
+<!-- ================= TESTS ================= -->
+<section id="tab-tests" class="tab">
+  <div class="intro"><b>Part 1 checks:</b> automated tests that the rules are enforced: no overlaps, legal shots only, tackles, saves, goals and the reset after them, pass blocking. They also check that α-β always returns the same value as minimax. The same tests run headless with <code>node tests.js</code>.</div>
+  <div class="panel toolbar"><button class="primary" id="runTests">Run all rule checks</button><span id="testSummary"></span></div>
+  <div class="two">
+    <div id="testList"></div>
+    <div class="panel"><h3>Text board printer (kickoff)</h3><pre id="textBoard"></pre>
+      <h3>Legal moves at kickoff</h3><pre id="kickMoves"></pre></div>
+  </div>
+</section>
+
+<!-- ================= RULES ================= -->
+<section id="tab-rules" class="tab"><div class="doc" id="rulesDoc"></div></section>
+</main>
+
+<div id="modal" class="hidden"><div class="modal-card" id="modalCard"></div></div>
+<canvas id="confetti"></canvas>
+
+<script src="engine.js"></script>
+<script src="agents.js"></script>
+<script src="tests.js"></script>
+<script src="ui-board.js"></script>
+<script src="ui-tree.js"></script>
+<script src="ui-lab.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
